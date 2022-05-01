@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"log"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go/aws"
@@ -10,15 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/textract"
 )
 
-func HandleRequest(ctx context.Context, event events.S3Event) error {
-	var bucket = event.Records[0].S3.Bucket.Name
-	var key = event.Records[0].S3.Object.URLDecodedKey
-
-	session := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
-
-	service := textract.New(session)
+func ExtractData(sess *session.Session, bucket string, key string) (*textract.DetectDocumentTextOutput, error) {
+	log.Print("ExtractData")
+	svc := textract.New(sess)
 
 	input := &textract.DetectDocumentTextInput{
 		Document: &textract.Document{
@@ -29,9 +24,31 @@ func HandleRequest(ctx context.Context, event events.S3Event) error {
 		},
 	}
 
-	response, err := service.DetectDocumentText(input)
+	response, err := svc.DetectDocumentText(input)
 
-	fmt.Println(response)
+	responseJson, _ := json.MarshalIndent(response, "", "  ")
+	log.Printf("RESPONSE: %s", responseJson)
+
+	errorJson, _ := json.MarshalIndent(err, "", "  ")
+	log.Printf("ERROR: %s", errorJson)
+
+	return response, err
+}
+
+func HandleRequest(ctx context.Context, event events.S3Event) error {
+	log.Print("HandleRequest")
+
+	eventJson, _ := json.MarshalIndent(event, "", "  ")
+	log.Printf("EVENT: %s", eventJson)
+
+	var bucket = event.Records[0].S3.Bucket.Name
+	var key = event.Records[0].S3.Object.URLDecodedKey
+
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+
+	_, err := ExtractData(sess, bucket, key)
 
 	return err
 }
